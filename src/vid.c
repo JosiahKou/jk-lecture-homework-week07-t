@@ -8,6 +8,7 @@
 18 controlRegister // NOTE: QEMU emulated PL110 CR is at 0x18
 ********************************************************/
 #include <stdint.h>
+#include <stdarg.h>
 
 #include "defines.h"
 #include "vid.h"
@@ -43,16 +44,19 @@ int fbuf_init() {
     **********/
     cursor = 219; // cursor = row 127 in font bitmap
     row = 13;
+    return 0;
 }
 
 int setpos(int r, int c) {
     row = r;
     col = c;
+    return 0;
 }
 
 int clrpix(int x, int y) { // clear pixel at (x,y) 
     int pix = y*WIDTH + x;
     fb[pix] = 0x00000000;
+    return 0;
 }
 
 int setpix(int x, int y) { // set pixel at (x,y)
@@ -62,12 +66,12 @@ int setpix(int x, int y) { // set pixel at (x,y)
     if (color==BLUE)
         fb[pix] = 0x00FF0000;
     if (color==GREEN)
-    fb[pix] = 0x0000FF00;
+        fb[pix] = 0x0000FF00;
     if (color==WHITE) 
         fb[pix] = 0x00FFFFFF;
     if (color==CYAN) 
         fb[pix] = 0x0000FFFF;
-
+    return 0;
 }
 
 int dchar(unsigned char c, int x, int y) { // display char at (x,y)
@@ -81,6 +85,7 @@ int dchar(unsigned char c, int x, int y) { // display char at (x,y)
                 setpix(x+bit, y+r);
         }
     }
+    return 0;
 }
 
 int undchar(unsigned char c, int x, int y) { // erase char at (x,y)
@@ -94,6 +99,7 @@ int undchar(unsigned char c, int x, int y) { // erase char at (x,y)
                 clrpix(x+bit, y+row);
         }
     }
+    return 0;
 }
 
 int scroll() { // scrow UP one line (the hard way)
@@ -101,6 +107,7 @@ int scroll() { // scrow UP one line (the hard way)
     for (i=208*WIDTH; i<WIDTH*HEIGHT; i++){
         fb[i] = fb[i + WIDTH*16];
     }
+    return 0;
 }
 
 int kpchar(char c, int ro, int co) { // print char at (row, col)
@@ -108,6 +115,7 @@ int kpchar(char c, int ro, int co) { // print char at (row, col)
     x = co*8;
     y = ro*16;
     dchar(c, x, y);
+    return 0;
 }
 
 int unkpchar(char c, int ro, int co) { // erase char at (row, col)
@@ -115,6 +123,7 @@ int unkpchar(char c, int ro, int co) { // erase char at (row, col)
     x = co*8;
     y = ro*16;
     undchar(c, x, y);
+    return 0;
 }
 
 int erasechar() {// erase char at (row,col)
@@ -127,14 +136,17 @@ int erasechar() {// erase char at (row,col)
             clrpix(x+bit, y+r);
         }
     }
+    return 0;
 }
 
 int clrcursor() { // clear cursor at (row, col)
     unkpchar(cursor, row, col);
+    return 0;
 }
 
 int putcursor(unsigned char c) { // set cursor at (row, col)
     kpchar(c, row, col);
+    return 0;
 }
 
 int kputc(char c) { // print char at cursor position
@@ -173,6 +185,7 @@ int kputc(char c) { // print char at cursor position
         }
     }
     putcursor(cursor);
+    return 0;
 }
 
 // The following implements kprintf() for formatted printing
@@ -181,6 +194,7 @@ int kprints(char *s) {
         kputc(*s);
         s++;
     }
+    return 0;
 }
 
 int krpx(int x) {
@@ -190,6 +204,7 @@ int krpx(int x) {
         krpx(x / 16);
         kputc(c);
     } 
+    return 0;
 }
 
 int kprintx(int x) {
@@ -197,6 +212,7 @@ int kprintx(int x) {
         kputc('0');
     else
         krpx(x);
+    return 0;
 }
 
 int krpu(int x) {
@@ -206,6 +222,7 @@ int krpu(int x) {
         krpu(x / 10);
         kputc(c);
     }
+    return 0;
 }
 
 int kprintu(int x) {
@@ -213,6 +230,7 @@ int kprintu(int x) {
         kputc('0');
     else
         krpu(x);
+    return 0;
 }
 
 int kprinti(int x) {
@@ -221,31 +239,49 @@ int kprinti(int x) {
         x = -x;
     }
     kprintu(x);
+    return 0;
 }
 
-int kprintf(char *fmt,...) {
-    int *ip;
-    char *cp;
-    cp = fmt;
-    ip = (int *)&fmt + 1;
-    while(*cp){
-        if (*cp != '%'){
+// va_list version of kprintf (Extra Credit)
+int vkprintf(const char *fmt, va_list args) {
+    const char* cp = fmt;
+    while (*cp) {
+        if (*cp != '%') {
             kputc(*cp);
-            if (*cp=='\n')
+            if (*cp == '\n')
                 kputc('\r');
             cp++;
             continue;
         }
         cp++;
-        switch(*cp){
-            case 'c': kputc((char)*ip); break;
-            case 's': kprints((char *)*ip); break;
-            case 'd': kprinti(*ip); break;
-            case 'u': kprintu(*ip); break;
-            case 'x': kprintx(*ip); break;
+        switch (*cp) {
+            case 'c':
+                kputc(va_arg(args, int));
+                break;
+            case 's':
+                kprints(va_arg(args, char *));
+                break;
+            case 'd':
+                kprinti(va_arg(args, int));
+                break;
+            case 'u':
+                kprintu(va_arg(args, int));
+                break;
+            case 'x':
+                kprintx(va_arg(args, int));
+                break;
         }
-        cp++; ip++;
+        cp++;
     }
+    return 0;
+}
+
+int kprintf(const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    vkprintf(fmt, args);
+    va_end(args);
+    return 0;
 }
 
 int show_bmp(char *p, int start_row, int start_col){// SAME as before
@@ -259,9 +295,9 @@ int show_bmp(char *p, int start_row, int start_col){// SAME as before
     //BMP images are upside down, each row is a multiple of 4 bytes
     rsize = 4*(w + 0); // multiple of 4
     p += (h-1)*rsize; // last row of pixels
-    for (i=start_row; i<start_row + h; i++){
+    for (int i=start_row; i<start_row + h; i++){
         pp = p;
-        for (j=start_col; j<start_col + w; j++){
+        for (int j=start_col; j<start_col + w; j++){
             b = *pp; g = *(pp+1); r = *(pp+2); // BRG values
             pixel = (b<<16) | (g<<8) | r; // pixel value
             fb[i*WIDTH + j] = pixel; // write to frame buffer
@@ -270,4 +306,5 @@ int show_bmp(char *p, int start_row, int start_col){// SAME as before
         p -= rsize; // to preceding row
     }
     printf("\nBMP image height=%d width=%d\n", h, w);
+    return 0;
 }
